@@ -148,7 +148,8 @@ u_prev = zeros(n_ip,1);
 
 %% ── 8.  USE NONLINEAR PLANT ─────────────────────────────────────────────
 %  Plant_Sim = 0  →  ode45 integration of TCL_Dynamics at every step
-Plant_Sim = 0;
+% 1 for linear
+Plant_Sim = 1;
 
 fprintf('Running closed-loop simulation with NONLINEAR plant ...\n');
 

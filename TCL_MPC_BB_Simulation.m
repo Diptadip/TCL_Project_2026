@@ -217,6 +217,17 @@ fprintf('  N = %d samples,  Total = %.1f min\n', N, N*Ts/60);
 fprintf('  Warm-up k=1..%d,  Settle k=%d..%d\n', k_warmup, k_warmup+1, k_settle);
 fprintf('  Step1   k=%d..%d,  Step2 k=%d..%d\n\n', k_step1, k_step2-1, k_step2, N);
 
+%  Plant_Sim = 0  →  nonlinear ODE via ode45  (DEFAULT — consistent with
+%                     TCL_PI_ServoDesign_Simulation.m Plant_Sim=0)
+%  Plant_Sim = 1  →  linear black-box SS model
+Plant_Sim = 1;
+
+if Plant_Sim == 0
+    fprintf('Plant model: NONLINEAR ODE (ode45)  [default]\n\n');
+else
+    fprintf('Plant model: LINEAR black-box SS\n\n');
+end
+
 %% ── 6.  Filter Parameters (SAME as PI servo files) ──────────────────────
 beta_r = 0.95;   phy_r = beta_r * eye(n_op);
 alfa_e = 0.95;   phy_e = alfa_e * eye(n_op);
@@ -309,8 +320,16 @@ for Noise_ON = 0:1
 
         % ---- Plant update (linear black-box model) ---------------------
         if k < N
-            xk_true(:,k+1) = A * xk_true(:,k) + B * uk(:,k);
-            yk(:,k+1)      = C * xk_true(:,k+1) + vk(:,k+1);
+            if Plant_Sim == 0
+                % Nonlinear ODE (consistent with PI servo simulation)
+                TCL.Uk = TCL.Us + uk(:,k);
+                [~, Xt] = ode45('TCL_Dynamics', [0 Ts], TCL.Xs + xk_true(:,k));
+                xk_true(:,k+1) = Xt(end,:)' - TCL.Xs;
+            else
+                % Linear black-box SS model
+                xk_true(:,k+1) = A * xk_true(:,k) + B * uk(:,k);
+            end
+            yk(:,k+1) = C * xk_true(:,k+1) + vk(:,k+1);
 
             % ---- Kalman update -----------------------------------------
             y_pred        = C * xk_hat(:,k);
