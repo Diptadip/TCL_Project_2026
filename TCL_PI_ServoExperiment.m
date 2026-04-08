@@ -1,30 +1,3 @@
-p% =========================================================================
-%  TCL_PI_ServoExperiment.m
-%
-%  Runs the validated servo-control experiment on the TCL Arduino board.
-%
-%  Setpoint schedule (absolute temperatures, deg C):
-%    Phase 1  k = 1   … 30   Warm-up: heaters OFF, system at ambient
-%    Phase 2  k = 31  … 100  PI active, setpoint = Ys  (settle at s.s.)
-%    Phase 3  k = 101 … 300  STEP 1: T1 UP  (+6 deg C), T2 DOWN (-4 deg C)
-%    Phase 4  k = 301 … 550  STEP 2: T1 DOWN(-5 deg C), T2 UP   (+7 deg C)
-%
-%  Total duration: 550 × 4 s = 2200 s ≈ 36.7 minutes
-%
-%  Validated by TCL_PI_ServoDesign_Simulation.m (nonlinear plant).
-%  Both heater steady-state values confirmed within [5%, 80%].
-%
-%  Plots (live + post-experiment):
-%    Fig 1 – Live strip chart  (updated every 15 samples = 60 s)
-%    Fig 2 – Temperature profiles vs setpoint  (post)
-%    Fig 3 – Heater input profiles             (post)
-%    Fig 4 – Filtered error signal             (post)
-%
-%  Dependencies:
-%    tclab_N.m                     (Arduino init)
-%    TCL_MechModel_Parameters.mat  (TCL struct including TCL.PI)
-% =========================================================================
-
 close all; clear all; clc
 
 %% ── 0.  Connect to Arduino ───────────────────────────────────────────────

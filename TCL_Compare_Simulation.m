@@ -1,59 +1,3 @@
-% =========================================================================
-%  TCL_Compare_Simulation.m
-%
-%  PURPOSE
-%  -------
-%  Loads pre-saved simulation results from PI and MPC (noise-free) runs,
-%  produces a graphical comparison and a performance-index table.
-%
-%  HOW TO ADD ANOTHER CONTROLLER TO THE COMPARISON
-%  ------------------------------------------------
-%  1. Run your new controller simulation and save results to a .mat file
-%     with the following variables (same convention used throughout):
-%       kT       – sample index vector  (N x 1)
-%       Yk       – absolute outputs     (2 x N)   [deg C]
-%       Uk       – absolute inputs      (2 x N)   [% heater]
-%       Rk_f     – filtered reference   (2 x N)   [deg C]
-%       ek_f     – filtered error       (2 x N)   [deg C]
-%       Xs_k     – SS target states     (n_st x N) [optional, set '' if N/A]
-%       Us_k     – SS target inputs     (2 x N)    [optional, set '' if N/A]
-%
-%  2. In SECTION 1 below, append one new entry to the CONTROLLERS struct:
-%       CONTROLLERS(end+1).label          = 'MyNewMPC';
-%       CONTROLLERS(end).file             = 'MyNewMPC_SimResults.mat';
-%       CONTROLLERS(end).Yk_var           = 'Yk';
-%       CONTROLLERS(end).Uk_var           = 'Uk';
-%       CONTROLLERS(end).Rk_f_var         = 'Rk_f';
-%       CONTROLLERS(end).ek_f_var         = 'ek_f';
-%       CONTROLLERS(end).Xs_var           = 'Xs_k';  % or '' if not applicable
-%       CONTROLLERS(end).Us_var           = 'Us_k';  % or '' if not applicable
-%       CONTROLLERS(end).color            = [0.1 0.6 0.1];
-%       CONTROLLERS(end).has_ss_targets   = true;    % false if no xs/us
-%
-%  3. That's it — all plots and the performance table update automatically.
-%
-%  REQUIREMENTS
-%  ------------
-%    TCL_MechModel_Parameters.mat
-%    TCL_PI_Servo_SimResults.mat           (TCL_PI_ServoDesign_Simulation.m)
-%    TCL_MPC_BB_SimResults_NoiseFree.mat   (TCL_MPC_BB_Simulation.m)
-%
-%  PLOTS
-%    Fig 1 – Yi(k) vs k and Ri(k) vs k  (i = 1, 2)
-%    Fig 2 – Ui(k) vs k  stairs          (i = 1, 2)
-%    Fig 3 – ef,i(k) vs k  stairs        (i = 1, 2)
-%    Fig 4 – xs,i(k) and us,i(k)  [controllers with SS targets only]
-%    Fig 5 – Performance index grouped bar chart
-%
-%  PERFORMANCE INDICES
-%    SSE_i     = sum [Yi(k) - Ri(k)]^2       i = 1, 2
-%    SSMV_i    = sum [Ui(k) - Us_i]^2        i = 1, 2
-%    SSdelMV_i = sum [Ui(k) - Ui(k-1)]^2     i = 1, 2
-%
-%  OUTPUT
-%    TCL_Compare_SimResults.mat
-% =========================================================================
-
 clear all
 close all
 clc
@@ -68,10 +12,6 @@ k_step1   = 101;
 k_step2   = 301;
 step_locs = [k_step1-1, k_step2-1];
 
-%% ════════════════════════════════════════════════════════════════════════
-%  SECTION 1 ── CONTROLLER REGISTRY
-%  Add / remove entries here. Everything downstream is automatic.
-% ════════════════════════════════════════════════════════════════════════
 
 % ── Controller 1: Decentralised IMC-PI ───────────────────────────────────
 CONTROLLERS(1).label          = 'PI';
@@ -87,7 +27,7 @@ CONTROLLERS(1).has_ss_targets = false;
 
 % ── Controller 2: Black-Box MPC (noisy) ─────────────────────────────
 CONTROLLERS(2).label          = 'MPC-SS-BB';
-CONTROLLERS(2).file           = 'TCL_MPC_BB_SimResults_Noisy.mat';
+CONTROLLERS(2).file           = 'TCL_MPC_BB_SimResults_NoiseFree.mat';
 CONTROLLERS(2).Yk_var         = 'Yk';
 CONTROLLERS(2).Uk_var         = 'Uk';
 CONTROLLERS(2).Rk_f_var       = 'Rk_f';
@@ -97,28 +37,28 @@ CONTROLLERS(2).Us_var         = 'Us_k';
 CONTROLLERS(2).color          = [0.80 0.15 0.15];   % red
 CONTROLLERS(2).has_ss_targets = true;
 
-CONTROLLERS(3).label          = 'MPC-SS-Mech';
-CONTROLLERS(3).file           = 'TCL_MPC_Mech_SimResults_Noisy.mat';
-CONTROLLERS(3).Yk_var         = 'Yk_mech';
-CONTROLLERS(3).Uk_var         = 'Uk_mech';
-CONTROLLERS(3).Rk_f_var       = 'Rk_f_mech';
-CONTROLLERS(3).ek_f_var       = 'ek_f_mech';
-CONTROLLERS(3).Xs_var         = 'Xs_k_mech';   % set '' if not applicable
-CONTROLLERS(3).Us_var         = 'Us_k_mech';   % set '' if not applicable
-CONTROLLERS(3).color          = [0.10 0.60 0.10];   % green
-CONTROLLERS(3).has_ss_targets = true;
-
-% ── TEMPLATE – copy, uncomment and fill to add a  controller ─────────
-CONTROLLERS(4).label          = 'MPC-OT-Mech';
-CONTROLLERS(4).file           = 'TCL_MPC_OT_SimResults_Noisy.mat';
-CONTROLLERS(4).Yk_var         = 'Yk_ot';
-CONTROLLERS(4).Uk_var         = 'Uk_ot';
-CONTROLLERS(4).Rk_f_var       = 'Rk_f_ot';
-CONTROLLERS(4).ek_f_var       = 'ek_f_ot';
-CONTROLLERS(4).Xs_var         = 'Xs_k_ot';   % set '' if not applicable
-CONTROLLERS(4).Us_var         = 'Us_k_ot';   % set '' if not applicable
-CONTROLLERS(4).color          = [0.8 0.10 0.80];   % green
-CONTROLLERS(4).has_ss_targets = true;
+% CONTROLLERS(3).label          = 'MPC-SS-Mech';
+% CONTROLLERS(3).file           = 'TCL_MPC_Mech_SimResults_NoiseFree.mat';
+% CONTROLLERS(3).Yk_var         = 'Yk';
+% CONTROLLERS(3).Uk_var         = 'Uk';
+% CONTROLLERS(3).Rk_f_var       = 'Rk_f';
+% CONTROLLERS(3).ek_f_var       = 'ek_f';
+% CONTROLLERS(3).Xs_var         = 'Xs_k';   % set '' if not applicable
+% CONTROLLERS(3).Us_var         = 'Us_k';   % set '' if not applicable
+% CONTROLLERS(3).color          = [0.10 0.60 0.10];   % green
+% CONTROLLERS(3).has_ss_targets = true;
+% 
+% % ── TEMPLATE – copy, uncomment and fill to add a  controller ─────────
+% CONTROLLERS(4).label          = 'MPC-OT-Mech';
+% CONTROLLERS(4).file           = 'TCL_MPC_OT_SimResults_NoiseFree.mat';
+% CONTROLLERS(4).Yk_var         = 'Yk_ot';
+% CONTROLLERS(4).Uk_var         = 'Uk_ot';
+% CONTROLLERS(4).Rk_f_var       = 'Rk_f_ot';
+% CONTROLLERS(4).ek_f_var       = 'ek_f_ot';
+% CONTROLLERS(4).Xs_var         = 'Xs_k_ot';   % set '' if not applicable
+% CONTROLLERS(4).Us_var         = 'Us_k_ot';   % set '' if not applicable
+% CONTROLLERS(4).color          = [0.8 0.10 0.80];   % green
+% CONTROLLERS(4).has_ss_targets = true;
 
 %% ════════════════════════════════════════════════════════════════════════
 %  SECTION 2 ── LOAD DATA
@@ -231,7 +171,7 @@ for i = 1:2
     grid on
     ylabel(sprintf('T_%d  (deg C)', i), 'FontSize', 11)
     if i == 1
-        title('Output Y_i(k) and Reference R_i(k) – Simulation (Noise-Free)', 'FontSize', 12)
+        title('Output Y_i(k) and Reference R_i(k) – Simulation', 'FontSize', 12)
     end
     if i == 2, xlabel('Sample  k', 'FontSize', 11); end
     leg = cellfun(@(lb) sprintf('Y_%d^{%s}(k)',i,lb), {CONTROLLERS.label}, ...

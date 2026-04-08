@@ -1,63 +1,3 @@
-% =========================================================================
-%  TCL_PI_ServoDesign_Simulation.m
-%
-%  PURPOSE
-%  -------
-%  Design and validate a servo-control experiment for the TCL Arduino board
-%  using two decentralised IMC-PI controllers and the NONLINEAR mechanistic
-%  plant model.
-%
-%  EXPERIMENT RATIONALE
-%  --------------------
-%  We want one temperature to increase and the other to decrease so that
-%  the two heater inputs move in OPPOSITE directions, giving a more
-%  informative and demanding servo test.
-%
-%  Proposed setpoint changes (perturbation from operating point Ys):
-%
-%    Phase 1  k = 1   … k_sp1-1  :  warm-up at steady state (heaters OFF)
-%    Phase 2  k = k_sp1 … k_sp2-1:  PI active, no setpoint change yet
-%                                    (system settles from start-up transient)
-%    Phase 3  k = k_sp2 … k_sp3-1:  STEP 1 –  T1 UP   +dT1_1 deg C
-%                                              T2 DOWN  -dT2_1 deg C
-%    Phase 4  k = k_sp3 … N       :  STEP 2 –  T1 DOWN  -dT1_2 deg C (below Ys)
-%                                              T2 UP    +dT2_2 deg C (above Ys)
-%
-%  The magnitudes are chosen so that:
-%    (a) The closed-loop nonlinear simulation settles well
-%    (b) The steady-state heater values after EACH step remain in [5%, 80%]
-%        (a comfortable safety margin inside [0%, 100%])
-%    (c) Total clock time is 30–40 minutes with Ts = 4 s
-%
-%  TIMING
-%  ------
-%    Ts      = 4 s/sample
-%    N       = 550 samples   → total = 550 × 4 = 2200 s ≈ 36.7 min
-%    k_warmup= 1  → 30  (120 s  – heaters off,  system at ambient)
-%    k_settle= 31 → 100 (280 s  – PI drives to Ys, heaters find Us)
-%    k_sp1   = 101→ 300 (800 s  – STEP 1: T1+dT1, T2-dT2)
-%    k_sp2   = 301→ 550 (1000 s – STEP 2: T1 back down, T2 up further)
-%
-%  CLOSED-LOOP SIMULATION PROCEDURE
-%  ---------------------------------
-%  1. Run with candidate setpoints using NONLINEAR ODE plant (Plant_Sim=0)
-%  2. Read off steady-state Uk values from the simulation
-%  3. Confirm Uk stays in [5, 80] %  for both heaters at both setpoints
-%  4. If not, adjust magnitudes and repeat
-%
-%  FINAL CHOSEN SETPOINTS  (perturbation from Ys)
-%  ------------------------------------------------
-%    Step 1:   delta_r1 = [ +6 ;  -4 ]  deg C   (T1 up, T2 down)
-%    Step 2:   delta_r2 = [ -5 ; +7  ]  deg C   (T1 down below Ys, T2 up)
-%
-%  These are verified by the nonlinear simulation below.
-%
-%  OUTPUT
-%  ------
-%  Saves  TCL_PI_Servo_SimResults.mat  for reference when running the
-%  experiment (contains Ys, Us, chosen setpoints, timing parameters).
-% =========================================================================
-
 clear all
 close all
 
@@ -138,7 +78,7 @@ ek_f = zeros(n_op, N);
 yk(:,1) = TCL.C_mat * xk(:,1);
 
 %% ── 6.  Noise ────────────────────────────────────────────────────────────
-Noise_ON = 1;
+Noise_ON = 0;
 vk = mvnrnd(zeros(n_op,1), TCL.R, N)';
 vk = Noise_ON * vk;
 
@@ -237,8 +177,8 @@ kT(N)     = N-1;
 %% ── 10.  Absolute arrays ─────────────────────────────────────────────────
 Xk   = TCL.Xs + xk;
 Uk   = TCL.Us + uk;
-Yk   = yk  + TCL.C_mat * TCL.Xs;
-Rk_f = rk_f + TCL.C_mat * TCL.Xs;
+Yk   = yk  + TCL.C_mat * TCL.Xs - 273.17*ones(n_op,N);
+Rk_f = rk_f + TCL.C_mat * TCL.Xs - 273.15*ones(n_op,N);
 
 %% ── 11.  Steady-state heater check ──────────────────────────────────────
 %  Read the last-20-sample average input during each settled phase

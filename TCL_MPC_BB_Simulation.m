@@ -1,63 +1,3 @@
-% =========================================================================
-%  TCL_MPC_BB_Simulation.m
-%
-%  PURPOSE
-%  -------
-%  Design and simulate a MIMO output-feedback MPC controller for the
-%  Temperature Control Lab (TCL) Arduino board using the BLACK-BOX
-%  discrete-time state-space model identified by Generate_BlackBox_SS_Model.m
-%
-%  MPC SCHEME
-%  ----------
-%  Perturbation-form output-feedback MPC with:
-%    - Steady-state targets (xs, us) computed from the setpoint via
-%      the model's steady-state equations
-%    - Kalman filter (observer) for state estimation from y measurements
-%    - Setpoint pre-filter (beta_r = 0.95, SAME as PI servo files)
-%    - Innovation / error filter (alfa_e = 0.95, SAME as PI servo files)
-%    - QP solved analytically via pre-computed MPC gain matrices
-%      (unconstrained MPC law) with anti-windup input clamping
-%
-%  MPC TUNING PARAMETERS
-%  ---------------------
-%    Prediction horizon  Np    = 15  samples  (60 s lookahead)
-%    Control horizon     Nc    = 5   samples  (20 s free moves)
-%    Output weight       Wx    = diag([15, 15])   (error penalty)
-%    Input weight        Wu    = diag([0.1, 0.1]) (absolute input penalty)
-%    Input-move weight   Wdelu = diag([1.0, 1.0]) (move suppression)
-%    Kalman Q_kf         = 1e-3 * eye(n_st)
-%    Kalman R_kf         = TCL.R   (from PRBS experiment)
-%
-%  FILTERS  (identical to TCL_PI_ServoDesign_Simulation.m)
-%    Setpoint filter:    beta_r = 0.95
-%    Innovation filter:  alfa_e = 0.95
-%
-%  EXPERIMENT TIMING  (identical to PI servo files)
-%    Ts       = 4 s,   N = 550 samples  (~36.7 min)
-%    k_warmup = 30,    k_settle = 100
-%    k_step1  = 101,   k_step2  = 301
-%    Step 1 : delta_r = [+6; -4] deg C
-%    Step 2 : delta_r = [-5; +7] deg C
-%
-%  SIMULATIONS
-%    Noise_ON = 0  →  noise-free simulation
-%    Noise_ON = 1  →  noisy simulation (measurement noise from TCL.R)
-%    Both are run sequentially and plotted separately.
-%
-%  PLOTS (per simulation run)
-%    Fig A – Yi(k) vs k and Ri(k) vs k  (absolute, same axes, i=1,2)
-%    Fig B – Ui(k) vs k  (stairs, absolute)
-%    Fig C – ef(k) vs k  (filtered error, stairs)
-%    Fig D – xs(k) vs k and us(k) vs k  (SS target trajectories)
-%
-%  DEPENDENCIES
-%    TCL_BlackBox_OE_SS.mat        (black-box model: idmod struct)
-%    TCL_MechModel_Parameters.mat  (TCL struct: Ys, Us, R, Xs, Samp_T)
-%
-%  OUTPUT
-%    TCL_MPC_BB_SimResults.mat
-% =========================================================================
-
 clear all
 close all
 clc
@@ -111,16 +51,7 @@ L_kf = L_kf';                        % n_st x n_op  observer gain
 
 fprintf('Kalman gain L_kf computed (DARE).\n\n');
 
-%% ── 3.  Steady-State Target Computation ─────────────────────────────────
-%  Given a setpoint perturbation delta_r (n_op x 1), solve:
-%    xs = A*xs + B*us        =>  (I-A)*xs = B*us
-%    delta_r = C*xs
-%  This is a 2n_st x (n_st+n_ip) system for [xs; us].
-%
-%  We compute the pseudo-inverse gain once offline:
-%    [xs; us] = M_ss \ [0_{n_st}; delta_r]
-%  where  M_ss = [(I-A)  -B ; C  0]
-
+%% ── 3.  Steady-State Target Computation ────────────────────────────────
 M_ss  = [(eye(n_st) - A), -B ; C, zeros(n_op, n_ip)];
 rhs0  = zeros(n_st + n_op, 1);      % template; rhs(n_st+1:end) = delta_r
 
@@ -129,18 +60,7 @@ M_ss_inv = pinv(M_ss);
 
 fprintf('Steady-state target gain M_ss_inv pre-computed.\n\n');
 
-%% ── 4.  Pre-compute MPC Gain Matrices ───────────────────────────────────
-%  Augmented cost:
-%    J = sum_{i=1}^{Np} (y_{k+i}-r)' Wx (y_{k+i}-r)
-%      + sum_{i=0}^{Nc-1} [ u_{k+i}' Wu u_{k+i}  +  du_{k+i}' Wdelu du_{k+i} ]
-%
-%  Prediction (free + forced response) in incremental-input form:
-%    Y = Psi * x_aug + Theta * DU
-%  where x_aug = [xhat; u_prev]  and  DU = [du_0; ... du_{Nc-1}]
-%
-%  Augmented model (delta-u formulation):
-%    x_aug(k+1) = A_aug * x_aug(k) + B_aug * du(k)
-%    y(k)       = C_aug * x_aug(k)
+%% ── 4.  Pre-compute MPC Gain Matrices ──────────────────────────────────
 
 A_aug = [A, B; zeros(n_ip, n_st), eye(n_ip)];
 B_aug = [B; eye(n_ip)];
@@ -174,21 +94,6 @@ end
 Wx_bar    = kron(eye(Np), Wx);
 Wu_bar    = kron(eye(Nc), Wu);
 Wdelu_bar = kron(eye(Nc), Wdelu);
-
-% Unconstrained MPC gain (move suppression + absolute input penalty)
-% Cost:  J = (Psi*x_aug - R_vec)'*Wx_bar*(Psi*x_aug - R_vec)
-%           + DU'*(Theta'*Wx_bar*Theta + Wu_bar + Wdelu_bar)*DU
-%           + cross terms with u_prev via Wu_bar ... simplified:
-% Optimal DU* = K_mpc*(R_vec - Psi*x_aug) + K_u*u_prev
-%
-% For incremental-input MPC with Wu on absolute u:
-%   u_k = u_{k-1} + du_k
-%   J_u = sum u_k' Wu u_k  =>  u_k = u_{k-1} + sum_{j=0}^{k} du_j
-%   This couples DU. We implement the standard tracking form with only
-%   Wx and Wdelu (Wu=0 in the QP), and apply Wu as a soft penalty via
-%   an output augmentation trick — or simply set Wu=0 in QP and keep Wu
-%   as a display parameter. For simplicity and robustness we merge
-%   Wu into Wdelu and solve the clean tracking QP:
 
 H_qp  = Theta' * Wx_bar * Theta + Wdelu_bar;
 K_mpc = (H_qp \ (Theta' * Wx_bar));         % Nc*n_ip x Np*n_op
@@ -459,7 +364,3 @@ for Noise_ON = 0:1
 end  % Noise_ON loop
 
 fprintf('\nAll simulations complete.\n');
-
-% =========================================================================
-%  END OF SCRIPT
-% =========================================================================

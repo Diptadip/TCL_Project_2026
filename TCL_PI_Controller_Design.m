@@ -1,20 +1,3 @@
-% =========================================================================
-%  TCL_PI_Controller_Design.m
-%  Designs two decentralized PI controllers for the Temperature Control Lab
-%  using IMC (Internal Model Control) tuning applied to the linearized
-%  discrete-time state-space model.
-%
-%  Method:   IMC-PID (Rivera, Morari & Skogestad, 1986)
-%  Pairing:  H1 -> T1  (loop 1),   H2 -> T2  (loop 2)
-%  Model:    Discrete SS (Phi, Gamma, C, D) from TCL_MechModel_Linearization
-%
-%  Structure of output:
-%    * Continuous-time PI parameters (Kc, TauI) for both loops
-%    * Discrete-time PI (velocity form) for real-time implementation
-%    * Closed-loop step response simulation & performance metrics
-%    * Bode / Nyquist stability analysis
-% =========================================================================
-
 clc; clear all; close all;
 
 %% ── 0. Load linearised model ─────────────────────────────────────────────
@@ -60,7 +43,6 @@ K_ss = dcgain(Gs);
 fprintf('=== Steady-State Gain Matrix K = G(0) ===\n');
 disp(K_ss)
 
-% RGA = K .* inv(K)'  (element-wise product)
 RGA = K_ss .* inv(K_ss)';
 
 fprintf('=== Relative Gain Array (RGA) ===\n');
@@ -69,13 +51,9 @@ fprintf(' -> RGA(1,1) = %.3f  (>0.5 confirms H1-T1 pairing is preferred)\n', RGA
 fprintf(' -> RGA(2,2) = %.3f  (>0.5 confirms H2-T2 pairing is preferred)\n\n', RGA(2,2));
 
 %% ── 4. Fit FOPDT models to diagonal channels ────────────────────────────
-%  G_ii(s) ≈ K_p * exp(-theta*s) / (tau*s + 1)
-%
-%  For the mechanistic TCL model the dominant poles are well-separated and
-%  a FOPDT fit is straightforward from step-response data.
 
 % --- Loop 1: G11 ---
-t_fopdt = 0:Ts:1200;                          % long enough to reach steady state
+t_fopdt = 0:Ts:1200; % long enough to reach steady state
 [y1, t1] = lsim(G11, ones(size(t_fopdt)), t_fopdt);
 [Kp1, tau1, theta1] = fit_FOPDT(t1, y1);
 
@@ -88,13 +66,6 @@ fprintf('Loop 1 (H1->T1): Kp=%.4f  tau=%.2f s  theta=%.2f s\n', Kp1, tau1, theta
 fprintf('Loop 2 (H2->T2): Kp=%.4f  tau=%.2f s  theta=%.2f s\n\n', Kp2, tau2, theta2);
 
 %% ── 5. IMC-PI Tuning ────────────────────────────────────────────────────
-%  Standard IMC-PID for a FOPDT process (Skogestad, 2003):
-%
-%       Kc  = (tau + theta/2) / (Kp * (lambda + theta/2))
-%       TauI = tau + theta/2
-%
-%  where lambda is the IMC filter time constant (closed-loop speed of
-%  response). A practical guideline: lambda = max(0.2*tau, theta).
 
 lambda1 = max(0.2*tau1, theta1);       % IMC tuning parameter, loop 1
 lambda2 = max(0.2*tau2, theta2);       % IMC tuning parameter, loop 2
@@ -111,15 +82,6 @@ fprintf('Loop 1:  Kc1 = %.4f    TauI1 = %.4f s    (lambda1 = %.2f s)\n', Kc1, Ta
 fprintf('Loop 2:  Kc2 = %.4f    TauI2 = %.4f s    (lambda2 = %.2f s)\n\n', Kc2, TauI2, lambda2);
 
 %% ── 6. Discrete PI (velocity / incremental form) ────────────────────────
-%  Suitable for direct implementation on the TCL hardware.
-%
-%  Forward-Euler discretisation of PI:
-%       u(k) = u(k-1) + Kc*[(e(k)-e(k-1)) + Ts/TauI * e(k)]
-%
-%  Bilinear (Tustin) discretisation (less windup):
-%       q0 = Kc*(1 + Ts/(2*TauI))
-%       q1 = Kc*(-1 + Ts/(2*TauI))
-%       u(k) = u(k-1) + q0*e(k) + q1*e(k-1)
 
 % Loop 1
 q0_1 = Kc1 * (1 + Ts/(2*TauI1));
@@ -147,9 +109,6 @@ T1_cl = feedback(L1, 1);                   % closed-loop, loop 1
 T2_cl = feedback(L2, 1);                   % closed-loop, loop 2
 
 %% ── 8. Stability margins (manual – avoids broken bodeplot internal class) ─
-%  Evaluate L(jw) on a dense log-frequency grid, then find:
-%    Phase crossover  wpc : |angle(L(jwpc))| = 180 deg  -> GM = 1/|L(jwpc)|
-%    Gain  crossover  wgc : |L(jwgc)|        = 1        -> PM = 180 + angle(L(jwgc))
 
 w = logspace(-4, 2, 8000);          % rad/s grid
 
@@ -333,9 +292,8 @@ TCL.PI.lambda2 = lambda2;
 save TCL_MechModel_Parameters TCL
 fprintf('PI parameters saved to TCL_MechModel_Parameters.mat\n');
 
-%% =========================================================================
-%  LOCAL FUNCTION – Fit a FOPDT model to a step response
-% =========================================================================
+%% ── LOCAL FUNCTIONS ─────────────────────────────────────────────────────
+
 function [Kp, tau, theta] = fit_FOPDT(t, y)
 % Identify K, tau, theta from step-response vector y(t).
 % Uses the standard graphical 28.3% / 63.2% tangent method.
@@ -361,9 +319,6 @@ function [Kp, tau, theta] = fit_FOPDT(t, y)
     theta = max(theta, 0);                 % cannot be negative
 end
 
-%% =========================================================================
-%  LOCAL FUNCTION – Manual gain and phase margins (no bodeplot dependency)
-% =========================================================================
 function [GM_dB, PM_deg, Wpc, Wgc] = manual_margins(L, w)
 % Compute stability margins by scanning L(jw) on the supplied frequency grid.
 %   GM_dB  – gain margin in dB  (Inf if no phase crossover found)
@@ -404,9 +359,6 @@ function [GM_dB, PM_deg, Wpc, Wgc] = manual_margins(L, w)
     end
 end
 
-%% =========================================================================
-%  LOCAL FUNCTION – Manual step performance metrics (no stepinfo dependency)
-% =========================================================================
 function [rt, st, os] = manual_stepinfo(t, y, yss)
 % Rise time, settling time (2% band), overshoot for step response y(t).
 %   yss – steady-state value (normally 1 for a normalised step)
