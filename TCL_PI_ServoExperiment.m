@@ -30,8 +30,8 @@ k_step1  = 101;     % k = 101… 300 : Step 1         (800 s)
 k_step2  = 301;     % k = 301… 550 : Step 2         (1000 s)
 
 %% ── 3.  Setpoint perturbations (validated by nonlinear simulation) ───────
-delta_r_step1 = [ +6 ; -4 ];   % T1 UP +6 deg C,  T2 DOWN -4 deg C
-delta_r_step2 = [ -5 ; +7 ];   % T1 DOWN -5 deg C, T2 UP  +7 deg C
+delta_r_step1 = [ +4 ; -2 ];   % T1 UP +6 deg C,  T2 DOWN -4 deg C
+delta_r_step2 = [ -2 ; +4 ];   % T1 DOWN -5 deg C, T2 UP  +7 deg C
 
 fprintf('=== Servo Experiment Setpoints ===\n');
 fprintf('  Step 1: T1 -> %.1f deg C  (Ys1%+.0f)    T2 -> %.1f deg C  (Ys2%+.0f)\n', ...

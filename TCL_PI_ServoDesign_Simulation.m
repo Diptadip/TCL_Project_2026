@@ -40,10 +40,10 @@ fprintf('  Step 2      : k = %d … %d  (%d s)\n\n', k_step2, N, (N-k_step2+1)*T
 
 %% ── 2.  Chosen setpoint perturbations ───────────────────────────────────
 %  STEP 1: T1 UP, T2 DOWN
-delta_r_step1 = [ +6 ; -4 ];   % deg C perturbation from Ys
+delta_r_step1 = [ +4 ; -2 ];   % deg C perturbation from Ys
 
 %  STEP 2: T1 DOWN (below Ys), T2 UP (above Ys)
-delta_r_step2 = [ -5 ; +7 ];   % deg C perturbation from Ys
+delta_r_step2 = [ -2 ; +4 ];   % deg C perturbation from Ys
 
 fprintf('=== Proposed Setpoint Changes ===\n');
 fprintf('  Step 1: T1 -> %.1f deg C  (Ys1 %+.1f)    T2 -> %.1f deg C  (Ys2 %+.1f)\n', ...
