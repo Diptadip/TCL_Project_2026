@@ -103,8 +103,8 @@ k_warmup = 30;
 k_step1  = 101;
 k_step2  = 301;
 
-delta_r_step1 = [ +6; -4 ];
-delta_r_step2 = [ -5; +7 ];
+delta_r_step1 = [ +4; -2 ];
+delta_r_step2 = [ -2; +4 ];
 
 u_H = [100; 100] - Us;   % upper input-perturbation bound
 u_L = [  0;   0] - Us;   % lower input-perturbation bound
