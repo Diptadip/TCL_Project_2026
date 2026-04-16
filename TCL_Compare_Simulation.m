@@ -14,8 +14,8 @@ step_locs = [k_step1-1, k_step2-1];
 
 
 % ── Controller 1: Decentralised IMC-PI ───────────────────────────────────
-CONTROLLERS(1).label          = 'PI';
-CONTROLLERS(1).file           = 'TCL_PI_Servo_SimResults.mat';
+CONTROLLERS(1).label          = 'MPC_Mech_sim';
+CONTROLLERS(1).file           = 'TCL_MPC_Mech_SimResults_NoiseFree.mat';
 CONTROLLERS(1).Yk_var         = 'Yk';
 CONTROLLERS(1).Uk_var         = 'Uk';
 CONTROLLERS(1).Rk_f_var       = 'Rk_f';
@@ -26,8 +26,8 @@ CONTROLLERS(1).color          = [0.15 0.35 0.75];   % blue
 CONTROLLERS(1).has_ss_targets = false;
 
 % ── Controller 2: Black-Box MPC (noisy) ─────────────────────────────
-CONTROLLERS(2).label          = 'MPC-SS-BB';
-CONTROLLERS(2).file           = 'TCL_MPC_BB_SimResults_NoiseFree.mat';
+CONTROLLERS(2).label          = 'MPC_Mech_exp';
+CONTROLLERS(2).file           = 'TCL_MPC_Mech_ExpResults.mat';
 CONTROLLERS(2).Yk_var         = 'Yk';
 CONTROLLERS(2).Uk_var         = 'Uk';
 CONTROLLERS(2).Rk_f_var       = 'Rk_f';

@@ -26,8 +26,8 @@ fprintf('                  H1_ss=%.2f %%       H2_ss=%.2f %%\n\n', Us(1), Us(2))
 %% ── 2.  MPC Tuning Parameters ────────────────────────────────────────────
 Np    = 15;
 Nc    = 5;
-Wx    = diag([15,  15 ]);
-Wdelu = diag([1.0, 1.0]);
+Wx    = diag([5.0, 5.0]);
+Wdelu = diag([20.0, 20.0]);
 
 %% ── 3.  Kalman Filter ────────────────────────────────────────────────────
 Q_kf = 1e-3 * eye(n_st);
@@ -78,11 +78,11 @@ k_settle = 100;
 k_step1  = 101;
 k_step2  = 301;
 
-delta_r_step1 = [ +6; -4 ];
-delta_r_step2 = [ -5; +7 ];
+delta_r_step1 = [ +4; -2 ];
+delta_r_step2 = [ -2; +4 ];
 
-u_H = [100; 100] - Us;
-u_L = [  0;   0] - Us;
+u_H = [80; 80] - Us;
+u_L = [  5;   5] - Us;
 
 fprintf('=== Experiment Setpoints ===\n');
 fprintf('  Step 1: T1->%.1f degC  T2->%.1f degC\n', Ys(1)+delta_r_step1(1), Ys(2)+delta_r_step1(2));

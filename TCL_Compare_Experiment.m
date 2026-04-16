@@ -1,36 +1,3 @@
-% =========================================================================
-%  TCL_Compare_Experiment.m
-%
-%  PURPOSE
-%  -------
-%  Loads saved results from the PI servo experiment and the MPC black-box
-%  experiment, then produces a graphical comparison and a performance-index
-%  table identical in structure to the simulation comparison.
-%
-%  REQUIREMENTS BEFORE RUNNING
-%  ---------------------------
-%    TCL_PI_Servo_ExpResults.mat      (from TCL_PI_ServoExperiment.m)
-%    TCL_MPC_BB_ExpResults.mat        (from TCL_MPC_BB_Experiment.m)
-%    TCL_MechModel_Parameters.mat     (for Ys, Us, Ts)
-%
-%  COMPARISON PLOTS
-%  ----------------
-%    Fig 1  –  Yi(k) vs k and Ri(k) vs k  for PI and MPC  (i=1,2)
-%    Fig 2  –  Ui(k) vs k  (stairs)  for PI and MPC  (i=1,2)
-%    Fig 3  –  ef,i(k) vs k  (stairs)  for PI and MPC  (i=1,2)
-%    Fig 4  –  xs,i(k) and us,i(k) vs k  (MPC only)
-%    Fig 5  –  Performance index bar chart
-%
-%  PERFORMANCE INDICES  (printed as formatted table)
-%  -------------------------------------------------
-%    SSE_i    = sum_{k=1}^{Ns} [Yi(k) - Ri(k)]^2         i=1,2
-%    SSMV_i   = sum_{k=1}^{Ns} [Ui(k) - Us_i]^2          i=1,2
-%    SSdelMV_i= sum_{k=1}^{Ns} [Ui(k) - Ui(k-1)]^2       i=1,2
-%
-%  OUTPUT
-%    TCL_Compare_ExpResults.mat
-% =========================================================================
-
 clear all
 close all
 clc
