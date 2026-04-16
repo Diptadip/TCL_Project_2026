@@ -31,9 +31,9 @@ fprintf('  Operating point:  H1_ss = %.2f %%      H2_ss = %.2f %%\n\n', Us(1), U
 Np    = 15;                           % prediction horizon (samples)
 Nc    = 5;                            % control horizon   (samples)
 
-Wx    = diag([25,  15 ]);             % output tracking weight   (n_op x n_op)
+Wx    = diag([15.0,  15.0]);             % output tracking weight   (n_op x n_op)
 Wu    = diag([0.1, 0.1]);             % absolute input weight    (n_ip x n_ip)
-Wdelu = diag([5.0, 5.0]);             % input-move weight        (n_ip x n_ip)
+Wdelu = diag([1.0, 1.0]);             % input-move weight        (n_ip x n_ip)
 
 fprintf('=== MPC Tuning ===\n');
 fprintf('  Np = %d,  Nc = %d,  Ts = %g s\n', Np, Nc, Ts);
@@ -114,8 +114,8 @@ delta_r_step2 = [ -2; +4 ];
 kT    = (0:N-1)';
 t_sec = kT * Ts;
 
-u_H = [80; 80] - Us;    % upper perturbation bound
-u_L = [  5;   5] - Us;    % lower perturbation bound
+u_H = [100; 100] - Us;    % upper perturbation bound
+u_L = [  0;   0] - Us;    % lower perturbation bound
 
 fprintf('=== Experiment Timing ===\n');
 fprintf('  N = %d samples,  Total = %.1f min\n', N, N*Ts/60);

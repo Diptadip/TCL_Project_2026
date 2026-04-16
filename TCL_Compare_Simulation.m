@@ -13,9 +13,9 @@ k_step2   = 301;
 step_locs = [k_step1-1, k_step2-1];
 
 
-% ── Controller 1: Decentralised IMC-PI ───────────────────────────────────
-CONTROLLERS(1).label          = 'MPC_Mech_sim';
-CONTROLLERS(1).file           = 'TCL_MPC_Mech_SimResults_NoiseFree.mat';
+% ── Controller 1: Decentralised PI ───────────────────────────────────
+CONTROLLERS(1).label          = 'PI-Sim';
+CONTROLLERS(1).file           = 'TCL_PI_Servo_SimResults.mat';
 CONTROLLERS(1).Yk_var         = 'Yk';
 CONTROLLERS(1).Uk_var         = 'Uk';
 CONTROLLERS(1).Rk_f_var       = 'Rk_f';
@@ -25,9 +25,9 @@ CONTROLLERS(1).Us_var         = '';
 CONTROLLERS(1).color          = [0.15 0.35 0.75];   % blue
 CONTROLLERS(1).has_ss_targets = false;
 
-% ── Controller 2: Black-Box MPC (noisy) ─────────────────────────────
-CONTROLLERS(2).label          = 'MPC_Mech_exp';
-CONTROLLERS(2).file           = 'TCL_MPC_Mech_ExpResults.mat';
+% ── Controller 2: Black-Box MPC (noise Free) ─────────────────────────────
+CONTROLLERS(2).label          = 'MPC-BB-SS';
+CONTROLLERS(2).file           = 'TCL_MPC_BB_SimResults_NoiseFree.mat';
 CONTROLLERS(2).Yk_var         = 'Yk';
 CONTROLLERS(2).Uk_var         = 'Uk';
 CONTROLLERS(2).Rk_f_var       = 'Rk_f';
@@ -37,28 +37,29 @@ CONTROLLERS(2).Us_var         = 'Us_k';
 CONTROLLERS(2).color          = [0.80 0.15 0.15];   % red
 CONTROLLERS(2).has_ss_targets = true;
 
-% CONTROLLERS(3).label          = 'MPC-SS-Mech';
-% CONTROLLERS(3).file           = 'TCL_MPC_Mech_SimResults_NoiseFree.mat';
-% CONTROLLERS(3).Yk_var         = 'Yk';
-% CONTROLLERS(3).Uk_var         = 'Uk';
-% CONTROLLERS(3).Rk_f_var       = 'Rk_f';
-% CONTROLLERS(3).ek_f_var       = 'ek_f';
-% CONTROLLERS(3).Xs_var         = 'Xs_k';   % set '' if not applicable
-% CONTROLLERS(3).Us_var         = 'Us_k';   % set '' if not applicable
-% CONTROLLERS(3).color          = [0.10 0.60 0.10];   % green
-% CONTROLLERS(3).has_ss_targets = true;
-% 
-% % ── TEMPLATE – copy, uncomment and fill to add a  controller ─────────
-% CONTROLLERS(4).label          = 'MPC-OT-Mech';
-% CONTROLLERS(4).file           = 'TCL_MPC_OT_SimResults_NoiseFree.mat';
-% CONTROLLERS(4).Yk_var         = 'Yk_ot';
-% CONTROLLERS(4).Uk_var         = 'Uk_ot';
-% CONTROLLERS(4).Rk_f_var       = 'Rk_f_ot';
-% CONTROLLERS(4).ek_f_var       = 'ek_f_ot';
-% CONTROLLERS(4).Xs_var         = 'Xs_k_ot';   % set '' if not applicable
-% CONTROLLERS(4).Us_var         = 'Us_k_ot';   % set '' if not applicable
-% CONTROLLERS(4).color          = [0.8 0.10 0.80];   % green
-% CONTROLLERS(4).has_ss_targets = true;
+% ── Controller 3: MPC Mech SS (noise Free) ─────────────────────────────
+CONTROLLERS(3).label          = 'MPC-Mech-SS';
+CONTROLLERS(3).file           = 'TCL_MPC_Mech_SimResults_NoiseFree.mat';
+CONTROLLERS(3).Yk_var         = 'Yk';
+CONTROLLERS(3).Uk_var         = 'Uk';
+CONTROLLERS(3).Rk_f_var       = 'Rk_f';
+CONTROLLERS(3).ek_f_var       = 'ek_f';
+CONTROLLERS(3).Xs_var         = 'Xs_k';   % set '' if not applicable
+CONTROLLERS(3).Us_var         = 'Us_k';   % set '' if not applicable
+CONTROLLERS(3).color          = [0.10 0.60 0.10];   % green
+CONTROLLERS(3).has_ss_targets = true;
+
+% ── Controller 4: MPC Mech OutputTracking (noise Free) ───────────────────────────── ─────────
+CONTROLLERS(4).label          = 'MPC-Mech-OT';
+CONTROLLERS(4).file           = 'TCL_MPC_OT_SimResults_NoiseFree.mat';
+CONTROLLERS(4).Yk_var         = 'Yk_ot';
+CONTROLLERS(4).Uk_var         = 'Uk_ot';
+CONTROLLERS(4).Rk_f_var       = 'Rk_f_ot';
+CONTROLLERS(4).ek_f_var       = 'ek_f_ot';
+CONTROLLERS(4).Xs_var         = 'Xs_k_ot';   % set '' if not applicable
+CONTROLLERS(4).Us_var         = 'Us_k_ot';   % set '' if not applicable
+CONTROLLERS(4).color          = [0.8 0.10 0.80];   % green
+CONTROLLERS(4).has_ss_targets = true;
 
 %% ════════════════════════════════════════════════════════════════════════
 %  SECTION 2 ── LOAD DATA

@@ -1,273 +1,451 @@
+
 clear all
 close all
 clc
 
-%% ── 0. Load operating-point info ─────────────────────────────────────────
-load TCL_MechModel_Parameters.mat   % TCL struct  (Ys, Us, Samp_T)
+
+%% ____  0. OPERATING POINT _____
+
+load TCL_MechModel_Parameters.mat   % provides TCL struct (Ys, Us, Samp_T, Xs)
 Ys = TCL.Ys(:);
 Us = TCL.Us(:);
 Ts = TCL.Samp_T;   % 4 s
 
-%% ── 1. Load PI experiment results ────────────────────────────────────────
-%  Variables expected from TCL_PI_ServoExperiment.m:
-%    time, t1s, t2s, h1s, h2s, R1s, R2s, e1s, e2s
-load TCL_PI_Servo_ExpResults.mat
-
-% Rename to common convention  (column vectors, absolute values)
-kT_pi    = (0:length(t1s)-1)';
-Yk_pi    = [t1s(:)'; t2s(:)'];    % 2 × Npi
-Uk_pi    = [h1s(:)'; h2s(:)'];
-Rk_f_pi  = [R1s(:)'; R2s(:)'];
-ek_f_pi  = [e1s(:)'; e2s(:)'];
-
-Npi = length(kT_pi);
-
-fprintf('PI experiment:  %d samples  (%.1f min)\n', Npi, Npi*Ts/60);
-
-%% ── 2. Load MPC experiment results ───────────────────────────────────────
-%  Variables expected from TCL_MPC_BB_Experiment.m:
-%    kT, t1s, t2s, h1s, h2s, R1s, R2s, e1s, e2s, xs1s, xs2s, us1s, us2s
-load TCL_MPC_BB_ExpResults.mat
-
-% Resolve naming conflict: re-assign after PI load
-kT_mpc   = kT(:);
-Yk_mpc   = [t1s(:)'; t2s(:)'];
-Uk_mpc   = [h1s(:)'; h2s(:)'];
-Rk_f_mpc = [R1s(:)'; R2s(:)'];
-ek_f_mpc = [e1s(:)'; e2s(:)'];
-
-% SS targets (MPC only)
-xs_mpc   = [xs1s(:)'; xs2s(:)'];          % perturbation form
-us_mpc   = [us1s(:)'; us2s(:)'];          % perturbation form
-Xs_mpc   = xs_mpc + repmat(TCL.Xs, 1, length(kT_mpc));   % absolute
-Us_mpc   = us_mpc + repmat(Us,     1, length(kT_mpc));    % absolute
-
-Nmpc = length(kT_mpc);
-
-fprintf('MPC experiment: %d samples  (%.1f min)\n', Nmpc, Nmpc*Ts/60);
-
-%% ── 3. Align lengths for fair comparison ────────────────────────────────
-%  Use the shorter of the two datasets as the comparison window
-Ns = min(Npi, Nmpc);
-fprintf('Comparison window  Ns = %d samples  (%.1f min)\n\n', Ns, Ns*Ts/60);
-
-kT_cmp = (0:Ns-1)';
-
-%% ── 4. Step transition sample indices (for vertical markers) ─────────────
-k_step1  = 101;
-k_step2  = 301;
+k_step1   = 101;
+k_step2   = 301;
 step_locs = [k_step1-1, k_step2-1];
 
-%% ════════════════════════════════════════════════════════════════════════
-%                     PERFORMANCE INDICES
-% ════════════════════════════════════════════════════════════════════════
+%  SECTION 1 -- CONTROLLER / DATASET REGISTRY
 
-% --- SSE ---
-SSE_pi_1  = sum((Yk_pi(1,1:Ns)   - Rk_f_pi(1,1:Ns)).^2);
-SSE_pi_2  = sum((Yk_pi(2,1:Ns)   - Rk_f_pi(2,1:Ns)).^2);
-SSE_mpc_1 = sum((Yk_mpc(1,1:Ns)  - Rk_f_mpc(1,1:Ns)).^2);
-SSE_mpc_2 = sum((Yk_mpc(2,1:Ns)  - Rk_f_mpc(2,1:Ns)).^2);
+% -- Controller 1: Decentralised PI ---------------------------------
 
-% --- SSMV ---
-SSMV_pi_1  = sum((Uk_pi(1,1:Ns)  - Us(1)).^2);
-SSMV_pi_2  = sum((Uk_pi(2,1:Ns)  - Us(2)).^2);
-SSMV_mpc_1 = sum((Uk_mpc(1,1:Ns) - Us(1)).^2);
-SSMV_mpc_2 = sum((Uk_mpc(2,1:Ns) - Us(2)).^2);
+CONTROLLERS(1).label          = 'PI';
+CONTROLLERS(1).file           = 'TCL_PI_Servo_ExpResults.mat';
+CONTROLLERS(1).Yk_var         = '';       % PATH B: assemble from scalar vecs
+CONTROLLERS(1).Uk_var         = '';
+CONTROLLERS(1).Rk_f_var       = '';
+CONTROLLERS(1).ek_f_var       = '';
+CONTROLLERS(1).t1_var         = 't1s';
+CONTROLLERS(1).t2_var         = 't2s';
+CONTROLLERS(1).h1_var         = 'h1s';
+CONTROLLERS(1).h2_var         = 'h2s';
+CONTROLLERS(1).R1_var         = 'R1s';
+CONTROLLERS(1).R2_var         = 'R2s';
+CONTROLLERS(1).e1_var         = 'e1s';
+CONTROLLERS(1).e2_var         = 'e2s';
+CONTROLLERS(1).kT_var         = '';       % not saved -> auto-generate
+CONTROLLERS(1).has_ss_targets = false;
+CONTROLLERS(1).xs_vars        = {};
+CONTROLLERS(1).us_vars        = {};
+CONTROLLERS(1).xs_absolute    = false;
+CONTROLLERS(1).us_absolute    = false;
+CONTROLLERS(1).color          = [0.15 0.35 0.75];   % blue
 
-% --- SSdelMV ---
-dUk_pi_1  = diff(Uk_pi(1,1:Ns));
-dUk_pi_2  = diff(Uk_pi(2,1:Ns));
-dUk_mpc_1 = diff(Uk_mpc(1,1:Ns));
-dUk_mpc_2 = diff(Uk_mpc(2,1:Ns));
+% -- Controller 2: Black-Box MPC ----------------------------------------
+CONTROLLERS(2).label          = 'MPC\_BB';
+CONTROLLERS(2).file           = 'TCL_MPC_BB_ExpResults.mat';
+CONTROLLERS(2).Yk_var         = '';       % PATH B
+CONTROLLERS(2).Uk_var         = '';
+CONTROLLERS(2).Rk_f_var       = '';
+CONTROLLERS(2).ek_f_var       = '';
+CONTROLLERS(2).t1_var         = 't1s';
+CONTROLLERS(2).t2_var         = 't2s';
+CONTROLLERS(2).h1_var         = 'h1s';
+CONTROLLERS(2).h2_var         = 'h2s';
+CONTROLLERS(2).R1_var         = 'R1s';
+CONTROLLERS(2).R2_var         = 'R2s';
+CONTROLLERS(2).e1_var         = 'e1s';
+CONTROLLERS(2).e2_var         = 'e2s';
+CONTROLLERS(2).kT_var         = 'kT';    % row vector 0:N-1
+CONTROLLERS(2).has_ss_targets = true;
+CONTROLLERS(2).xs_vars        = {'xs1s', 'xs2s'};  % perturbation scalars
+CONTROLLERS(2).us_vars        = {'us1s', 'us2s'};  % perturbation scalars
+CONTROLLERS(2).xs_absolute    = false;   % add TCL.Xs to convert to absolute
+CONTROLLERS(2).us_absolute    = false;   % add Us to convert to absolute
+CONTROLLERS(2).color          = [0.80 0.15 0.15];   % red
 
-SSdelMV_pi_1  = sum(dUk_pi_1.^2);
-SSdelMV_pi_2  = sum(dUk_pi_2.^2);
-SSdelMV_mpc_1 = sum(dUk_mpc_1.^2);
-SSdelMV_mpc_2 = sum(dUk_mpc_2.^2);
+% -- Controller 3: Mechanistic MPC ---------------------------------------
+CONTROLLERS(3).label          = 'MPC\_Mech';
+CONTROLLERS(3).file           = 'TCL_MPC_Mech_ExpResults.mat';
+CONTROLLERS(3).Yk_var         = 'Yk';       % PATH B
+CONTROLLERS(3).Uk_var         = 'Uk';
+CONTROLLERS(3).Rk_f_var       = 'Rk_f';
+CONTROLLERS(3).ek_f_var       = 'ek_f';
+CONTROLLERS(3).t1_var         = 't_sec';
+CONTROLLERS(3).t2_var         = 't_sec';
+CONTROLLERS(3).h1_var         = '';
+CONTROLLERS(3).h2_var         = '';
+CONTROLLERS(3).R1_var         = '';
+CONTROLLERS(3).R2_var         = '';
+CONTROLLERS(3).e1_var         = '';
+CONTROLLERS(3).e2_var         = '';
+CONTROLLERS(3).kT_var         = 'kT';
+CONTROLLERS(3).has_ss_targets = true;
+CONTROLLERS(3).xs_vars        = {'Xs_k'};  % perturbation scalars
+CONTROLLERS(3).us_vars        = {'Us_k'};  % perturbation scalars
+CONTROLLERS(3).xs_absolute    = false;   % add TCL.Xs to convert to absolute
+CONTROLLERS(3).us_absolute    = false;   % add Us to convert to absolute
+CONTROLLERS(3).color          = [0.10 0.60 0.10];   % green
 
-%% ── Print performance table ───────────────────────────────────────────────
-fprintf('=================================================================\n');
-fprintf('           EXPERIMENT PERFORMANCE INDEX COMPARISON\n');
-fprintf('           (Ns = %d samples,  %.1f min)\n', Ns, Ns*Ts/60);
-fprintf('=================================================================\n');
-fprintf('  Index          |   PI (Loop 1) |  PI (Loop 2) | MPC (Loop 1) | MPC (Loop 2)\n');
-fprintf('-----------------+---------------+--------------+--------------+-------------\n');
-fprintf('  SSE            |  %11.4f  |  %10.4f  |  %10.4f  | %10.4f\n', ...
-    SSE_pi_1,  SSE_pi_2,  SSE_mpc_1,  SSE_mpc_2);
-fprintf('  SSMV           |  %11.4f  |  %10.4f  |  %10.4f  | %10.4f\n', ...
-    SSMV_pi_1, SSMV_pi_2, SSMV_mpc_1, SSMV_mpc_2);
-fprintf('  SSdeltaMV      |  %11.4f  |  %10.4f  |  %10.4f  | %10.4f\n', ...
-    SSdelMV_pi_1, SSdelMV_pi_2, SSdelMV_mpc_1, SSdelMV_mpc_2);
-fprintf('=================================================================\n\n');
+% -- Controller 4: Output-Tracking MPC -----------------------------------
 
-%% ════════════════════════════════════════════════════════════════════════
-%                          COMPARISON PLOTS
-% ════════════════════════════════════════════════════════════════════════
+CONTROLLERS(4).label          = 'MPC\_OT';
+CONTROLLERS(4).file           = 'TCL_MPC_OT_ExpResults.mat';
+CONTROLLERS(4).Yk_var         = 'Yk_ot';      % PATH A: 2xN matrix
+CONTROLLERS(4).Uk_var         = 'Uk_ot';
+CONTROLLERS(4).Rk_f_var       = 'Rk_f_ot';
+CONTROLLERS(4).ek_f_var       = 'ek_f_ot';
+CONTROLLERS(4).t1_var         = '';            % not used (PATH A)
+CONTROLLERS(4).t2_var         = '';
+CONTROLLERS(4).h1_var         = '';
+CONTROLLERS(4).h2_var         = '';
+CONTROLLERS(4).R1_var         = '';
+CONTROLLERS(4).R2_var         = '';
+CONTROLLERS(4).e1_var         = '';
+CONTROLLERS(4).e2_var         = '';
+CONTROLLERS(4).kT_var         = 'kT';         % column vector 0:N-1
+CONTROLLERS(4).has_ss_targets = true;
+CONTROLLERS(4).xs_vars        = {'Xs_k_ot'};  % single 2xN matrix, already absolute
+CONTROLLERS(4).us_vars        = {'Us_k_ot'};
+CONTROLLERS(4).xs_absolute    = true;         % no offset needed
+CONTROLLERS(4).us_absolute    = true;
+CONTROLLERS(4).color          = [0.80 0.40 0.00];   % orange
 
-%% ── Figure 1: Yi(k) vs k and Ri(k) vs k ─────────────────────────────────
-figure('Name','Exp Comparison – Output Profiles','NumberTitle','off','Position',[50 50 1000 700])
 
-subplot(2,1,1)
-plot(kT_cmp, Yk_pi(1,1:Ns),   'b-',  'LineWidth',1.8), hold on
-plot(kT_cmp, Yk_mpc(1,1:Ns),  'r-',  'LineWidth',1.8)
-plot(kT_cmp, Rk_f_pi(1,1:Ns), 'k--', 'LineWidth',1.2)
-xline(step_locs(1),'k:','Step 1','LabelVerticalAlignment','bottom','FontSize',8)
-xline(step_locs(2),'k:','Step 2','LabelVerticalAlignment','bottom','FontSize',8)
-grid on
-ylabel('T_1  (deg C)','FontSize',11)
-title('Output Y_1(k) and Reference R_1(k) – Experiment','FontSize',12)
-legend('Y_1^{PI}(k)','Y_1^{MPC}(k)','R_1(k)','Location','Best','FontSize',9)
 
-subplot(2,1,2)
-plot(kT_cmp, Yk_pi(2,1:Ns),   'b-',  'LineWidth',1.8), hold on
-plot(kT_cmp, Yk_mpc(2,1:Ns),  'r-',  'LineWidth',1.8)
-plot(kT_cmp, Rk_f_pi(2,1:Ns), 'k--', 'LineWidth',1.2)
-xline(step_locs(1),'k:')
-xline(step_locs(2),'k:')
-grid on
-ylabel('T_2  (deg C)','FontSize',11)
-xlabel('Sample  k','FontSize',11)
-title('Output Y_2(k) and Reference R_2(k)','FontSize',12)
-legend('Y_2^{PI}(k)','Y_2^{MPC}(k)','R_2(k)','Location','Best','FontSize',9)
+%%  SECTION 2 -- LOAD DATA
 
-%% ── Figure 2: Ui(k) vs k ─────────────────────────────────────────────────
-figure('Name','Exp Comparison – Heater Inputs','NumberTitle','off','Position',[100 50 1000 700])
+nC = length(CONTROLLERS);
 
-subplot(2,1,1)
-stairs(kT_cmp, Uk_pi(1,1:Ns)',  'b-', 'LineWidth',1.8), hold on
-stairs(kT_cmp, Uk_mpc(1,1:Ns)', 'r-', 'LineWidth',1.8)
-yline(5,  'k--', 'LineWidth',0.9)
-yline(80, 'k--', 'LineWidth',0.9)
-xline(step_locs(1),'k:')
-xline(step_locs(2),'k:')
-grid on
-ylim([0 105])
-ylabel('U_1(k)  (% heater)','FontSize',11)
-title('Heater Input U_1(k) – Experiment','FontSize',12)
-legend('U_1^{PI}(k)','U_1^{MPC}(k)','Safety bounds','Location','Best','FontSize',9)
+for c = 1:nC
+    fprintf('Loading: %s  (%s) ...\n', CONTROLLERS(c).label, CONTROLLERS(c).file);
+    raw = load(CONTROLLERS(c).file);
 
-subplot(2,1,2)
-stairs(kT_cmp, Uk_pi(2,1:Ns)',  'b-', 'LineWidth',1.8), hold on
-stairs(kT_cmp, Uk_mpc(2,1:Ns)', 'r-', 'LineWidth',1.8)
-yline(5,  'k--', 'LineWidth',0.9)
-yline(80, 'k--', 'LineWidth',0.9)
-xline(step_locs(1),'k:')
-xline(step_locs(2),'k:')
-grid on
-ylim([0 105])
-ylabel('U_2(k)  (% heater)','FontSize',11)
-xlabel('Sample  k','FontSize',11)
-title('Heater Input U_2(k)','FontSize',12)
-legend('U_2^{PI}(k)','U_2^{MPC}(k)','Safety bounds','Location','Best','FontSize',9)
+    % -- Output  Yk  (2 x N) ---------------------------------------------
+    if ~isempty(CONTROLLERS(c).Yk_var) && isfield(raw, CONTROLLERS(c).Yk_var)
+        % PATH A: variable is already a 2xN matrix
+        CONTROLLERS(c).Yk = raw.(CONTROLLERS(c).Yk_var);
+    else
+        % PATH B: assemble from two separate row/column vector
+        fprintf('%d\n',c);
+        CONTROLLERS(c).Yk = [raw.(CONTROLLERS(c).t1_var)(:)'; ...
+                              raw.(CONTROLLERS(c).t2_var)(:)'];
+    end
 
-%% ── Figure 3: ef(k) vs k ─────────────────────────────────────────────────
-figure('Name','Exp Comparison – Filtered Error','NumberTitle','off','Position',[150 50 1000 700])
+    % -- Input  Uk  (2 x N) ----------------------------------------------
+    if ~isempty(CONTROLLERS(c).Uk_var) && isfield(raw, CONTROLLERS(c).Uk_var)
+        CONTROLLERS(c).Uk = raw.(CONTROLLERS(c).Uk_var);
+    else
+        CONTROLLERS(c).Uk = [raw.(CONTROLLERS(c).h1_var)(:)'; ...
+                              raw.(CONTROLLERS(c).h2_var)(:)'];
+    end
 
-subplot(2,1,1)
-stairs(kT_cmp, ek_f_pi(1,1:Ns)',  'b-', 'LineWidth',1.8), hold on
-stairs(kT_cmp, ek_f_mpc(1,1:Ns)', 'r-', 'LineWidth',1.8)
-yline(0,'k--','LineWidth',0.8)
-xline(step_locs(1),'k:')
-xline(step_locs(2),'k:')
-grid on
-ylabel('e_{f,1}(k)  (deg C)','FontSize',11)
-title('Filtered Error e_{f,1}(k) – Experiment','FontSize',12)
-legend('PI','MPC','Location','Best','FontSize',9)
+    % -- Reference  Rk_f  (2 x N) ----------------------------------------
+    if ~isempty(CONTROLLERS(c).Rk_f_var) && isfield(raw, CONTROLLERS(c).Rk_f_var)
+        CONTROLLERS(c).Rk_f = raw.(CONTROLLERS(c).Rk_f_var);
+    else
+        CONTROLLERS(c).Rk_f = [raw.(CONTROLLERS(c).R1_var)(:)'; ...
+                                raw.(CONTROLLERS(c).R2_var)(:)'];
+    end
 
-subplot(2,1,2)
-stairs(kT_cmp, ek_f_pi(2,1:Ns)',  'b-', 'LineWidth',1.8), hold on
-stairs(kT_cmp, ek_f_mpc(2,1:Ns)', 'r-', 'LineWidth',1.8)
-yline(0,'k--','LineWidth',0.8)
-xline(step_locs(1),'k:')
-xline(step_locs(2),'k:')
-grid on
-ylabel('e_{f,2}(k)  (deg C)','FontSize',11)
-xlabel('Sample  k','FontSize',11)
-title('Filtered Error e_{f,2}(k)','FontSize',12)
-legend('PI','MPC','Location','Best','FontSize',9)
+    % -- Filtered error  ek_f  (2 x N) -----------------------------------
+    if ~isempty(CONTROLLERS(c).ek_f_var) && isfield(raw, CONTROLLERS(c).ek_f_var)
+        CONTROLLERS(c).ek_f = raw.(CONTROLLERS(c).ek_f_var);
+    else
+        CONTROLLERS(c).ek_f = [raw.(CONTROLLERS(c).e1_var)(:)'; ...
+                                raw.(CONTROLLERS(c).e2_var)(:)'];
+    end
 
-%% ── Figure 4: xs(k) and us(k) vs k  (MPC only) ──────────────────────────
-[n_st_bb, ~] = size(Xs_mpc);
+    % -- Sample index  kT -------------------------------------------------
+    if ~isempty(CONTROLLERS(c).kT_var) && isfield(raw, CONTROLLERS(c).kT_var)
+        CONTROLLERS(c).kT = raw.(CONTROLLERS(c).kT_var)(:);  % force column
+    else
+        CONTROLLERS(c).kT = (0 : size(CONTROLLERS(c).Yk, 2) - 1)';
+    end
 
-figure('Name','Exp MPC – SS Targets xs(k) and us(k)','NumberTitle','off','Position',[200 50 1000 700])
+    % -- Optional SS targets ----------------------------------------------
+    if CONTROLLERS(c).has_ss_targets && ~isempty(CONTROLLERS(c).xs_vars)
 
-subplot(2,1,1)
-plot(kT_mpc(1:Ns), Xs_mpc(1,1:Ns), 'b-', 'LineWidth',1.8), hold on
-if n_st_bb > 1
-    plot(kT_mpc(1:Ns), Xs_mpc(2,1:Ns), 'r-', 'LineWidth',1.8)
+        % xs: each entry is either a scalar vector or a pre-stacked matrix
+        xs_rows = {};
+        for vi = 1:length(CONTROLLERS(c).xs_vars)
+            v = raw.(CONTROLLERS(c).xs_vars{vi});
+            if min(size(v)) > 1
+                xs_rows{end+1} = v;      % already 2xN (or nxN) matrix %#ok
+            else
+                xs_rows{end+1} = v(:)';  % scalar vector -> row %#ok
+            end
+        end
+        xs_raw = vertcat(xs_rows{:});    % n_states x N
+
+        % us: same logic
+        us_rows = {};
+        for vi = 1:length(CONTROLLERS(c).us_vars)
+            v = raw.(CONTROLLERS(c).us_vars{vi});
+            if min(size(v)) > 1
+                us_rows{end+1} = v;      %#ok
+            else
+                us_rows{end+1} = v(:)';  %#ok
+            end
+        end
+        us_raw = vertcat(us_rows{:});    % 2 x N
+
+        N_ss = size(xs_raw, 2);
+
+        % Apply operating-point offset if saved in perturbation form
+        if CONTROLLERS(c).xs_absolute
+            CONTROLLERS(c).Xs_k = xs_raw;
+        else
+            CONTROLLERS(c).Xs_k = xs_raw + repmat(TCL.Xs(:), 1, N_ss);
+        end
+
+        if CONTROLLERS(c).us_absolute
+            CONTROLLERS(c).Us_k = us_raw;
+        else
+            CONTROLLERS(c).Us_k = us_raw + repmat(Us, 1, N_ss);
+        end
+
+    else
+        CONTROLLERS(c).Xs_k = [];
+        CONTROLLERS(c).Us_k = [];
+    end
+
+    CONTROLLERS(c).N = length(CONTROLLERS(c).kT);
+    fprintf('   %d samples  (%.1f min)\n', CONTROLLERS(c).N, CONTROLLERS(c).N*Ts/60);
 end
-xline(step_locs(1),'k:')
-xline(step_locs(2),'k:')
-grid on
-ylabel('x_{s,i}(k)  (deg C)','FontSize',11)
-title('MPC SS Target States x_s(k)  [Experiment]','FontSize',12)
-leg_xs = arrayfun(@(i) sprintf('x_{s,%d}^{MPC}(k)',i), 1:n_st_bb, 'UniformOutput',false);
-legend(leg_xs{:},'Location','Best','FontSize',9)
 
-subplot(2,1,2)
-stairs(kT_mpc(1:Ns), Us_mpc(1,1:Ns)', 'b-', 'LineWidth',1.8), hold on
-stairs(kT_mpc(1:Ns), Us_mpc(2,1:Ns)', 'r-', 'LineWidth',1.8)
-xline(step_locs(1),'k:')
-xline(step_locs(2),'k:')
-grid on
-ylabel('u_{s,i}(k)  (% heater)','FontSize',11)
-xlabel('Sample  k','FontSize',11)
-title('MPC SS Target Inputs u_s(k)','FontSize',12)
-legend('u_{s,1}^{MPC}(k)','u_{s,2}^{MPC}(k)','Location','Best','FontSize',9)
+% Comparison window = shortest dataset
+Ns = min([CONTROLLERS.N]);
+kT = (0:Ns-1)';
+fprintf('\nComparison window  Ns = %d samples  (%.1f min)\n\n', Ns, Ns*Ts/60);
 
-%% ── Figure 5: Performance index bar chart ───────────────────────────────
-figure('Name','Exp Performance Index Comparison','NumberTitle','off','Position',[250 50 1000 500])
+% Reference signal for plotting (use first controller's reference)
+Rk_f_ref = CONTROLLERS(1).Rk_f(:, 1:Ns);
 
-metrics_loop1 = [SSE_pi_1,     SSE_mpc_1;
-                 SSMV_pi_1,    SSMV_mpc_1;
-                 SSdelMV_pi_1, SSdelMV_mpc_1];
+%%  SECTION 3 -- PERFORMANCE INDICES
 
-metrics_loop2 = [SSE_pi_2,     SSE_mpc_2;
-                 SSMV_pi_2,    SSMV_mpc_2;
-                 SSdelMV_pi_2, SSdelMV_mpc_2];
+for c = 1:nC
+    Yk_c = CONTROLLERS(c).Yk(:, 1:Ns);
+    Uk_c = CONTROLLERS(c).Uk(:, 1:Ns);
+    Rk_c = CONTROLLERS(c).Rk_f(:, 1:Ns);
+
+    for i = 1:2
+        CONTROLLERS(c).SSE(i)     = sum((Yk_c(i,:) - Rk_c(i,:)).^2);
+        CONTROLLERS(c).SSMV(i)    = sum((Uk_c(i,:) - Us(i)).^2);
+        CONTROLLERS(c).SSdelMV(i) = sum(diff(Uk_c(i,:)).^2);
+    end
+end
+
+% -- Print formatted table ------------------------------------------------
+col_w = 16;
+sep   = repmat('=', 1, 20 + col_w*nC);
+sep2  = repmat('-', 1, 20 + col_w*nC);
+fprintf('%s\n', sep);
+fprintf('  EXPERIMENT PERFORMANCE INDEX COMPARISON  (Ns=%d, %.1f min)\n', Ns, Ns*Ts/60);
+fprintf('%s\n', sep);
+hdr = sprintf('  %-18s', 'Index');
+for c = 1:nC, hdr = [hdr sprintf('| %-14s', CONTROLLERS(c).label)]; end %#ok
+fprintf('%s\n%s\n', hdr, sep2);
+
+rows   = {'SSE (Loop 1)', 'SSE (Loop 2)', ...
+          'SSMV (Loop 1)', 'SSMV (Loop 2)', ...
+          'SSdeltaMV (L1)', 'SSdeltaMV (L2)'};
+fields = {'SSE','SSE','SSMV','SSMV','SSdelMV','SSdelMV'};
+loops  = [1 2 1 2 1 2];
+
+for r = 1:6
+    line = sprintf('  %-18s', rows{r});
+    for c = 1:nC
+        line = [line sprintf('| %14.4f ', CONTROLLERS(c).(fields{r})(loops(r)))]; %#ok
+    end
+    fprintf('%s\n', line);
+end
+fprintf('%s\n\n', sep);
+
+%%  SECTION 4 -- PLOTS
+
+line_styles = {'-','-','-','-','-'};   % cycles for up to 5 controllers
+
+%% -- Figure 1: Yi(k) vs k ------------------------------------------------
+figure('Name','Exp Comparison - Output Profiles','NumberTitle','off', ...
+       'Position',[50 50 1000 700])
+
+for i = 1:2
+    subplot(2,1,i), hold on
+    for c = 1:nC
+        plot(kT, CONTROLLERS(c).Yk(i,1:Ns), ...
+             'Color',     CONTROLLERS(c).color, ...
+             'LineStyle', line_styles{min(c,5)}, ...
+             'LineWidth', 1.8);
+    end
+    plot(kT, Rk_f_ref(i,:), 'k--', 'LineWidth', 1.2)
+    xline(step_locs(1),'k:','Step 1','LabelVerticalAlignment','bottom','FontSize',8)
+    xline(step_locs(2),'k:','Step 2','LabelVerticalAlignment','bottom','FontSize',8)
+    grid on
+    ylabel(sprintf('T_%d  (deg C)', i), 'FontSize', 11)
+    if i == 1
+        title('Output Y_i(k) and Reference R_i(k) - Experiment', 'FontSize', 12)
+    end
+    if i == 2, xlabel('Sample  k', 'FontSize', 11); end
+    leg = cellfun(@(lb) sprintf('Y_%d^{%s}(k)', i, lb), {CONTROLLERS.label}, ...
+                  'UniformOutput', false);
+    leg{end+1} = sprintf('R_%d(k)', i);
+    legend(leg{:}, 'Location','Best','FontSize',9)
+end
+
+%% -- Figure 2: Ui(k) vs k ------------------------------------------------
+figure('Name','Exp Comparison - Heater Inputs','NumberTitle','off', ...
+       'Position',[100 50 1000 700])
+
+for i = 1:2
+    subplot(2,1,i), hold on
+    for c = 1:nC
+        stairs(kT, CONTROLLERS(c).Uk(i,1:Ns)', ...
+               'Color',     CONTROLLERS(c).color, ...
+               'LineStyle', line_styles{min(c,5)}, ...
+               'LineWidth', 1.8);
+    end
+    yline(5,  'k--', 'LineWidth', 0.9)
+    yline(80, 'k--', 'LineWidth', 0.9)
+    xline(step_locs(1),'k:')
+    xline(step_locs(2),'k:')
+    grid on
+    ylim([0 105])
+    ylabel(sprintf('U_%d(k)  (%% heater)', i), 'FontSize', 11)
+    if i == 1, title('Heater Input U_i(k) - Experiment', 'FontSize', 12); end
+    if i == 2, xlabel('Sample  k', 'FontSize', 11); end
+    leg = cellfun(@(lb) sprintf('U_%d^{%s}(k)', i, lb), {CONTROLLERS.label}, ...
+                  'UniformOutput', false);
+    leg{end+1} = 'Safety bounds';
+    legend(leg{:}, 'Location','Best','FontSize',9)
+end
+
+%% -- Figure 3: ef(k) vs k ------------------------------------------------
+figure('Name','Exp Comparison - Filtered Error','NumberTitle','off', ...
+       'Position',[150 50 1000 700])
+
+for i = 1:2
+    subplot(2,1,i), hold on
+    for c = 1:nC
+        stairs(kT, CONTROLLERS(c).ek_f(i,1:Ns)', ...
+               'Color',     CONTROLLERS(c).color, ...
+               'LineStyle', line_styles{min(c,5)}, ...
+               'LineWidth', 1.8);
+    end
+    yline(0, 'k--', 'LineWidth', 0.8)
+    xline(step_locs(1),'k:')
+    xline(step_locs(2),'k:')
+    grid on
+    ylabel(sprintf('e_{f,%d}(k)  (deg C)', i), 'FontSize', 11)
+    if i == 1, title('Filtered Error e_{f,i}(k) - Experiment', 'FontSize', 12); end
+    if i == 2, xlabel('Sample  k', 'FontSize', 11); end
+    legend({CONTROLLERS.label}, 'Location','Best','FontSize',9)
+end
+
+%% -- Figure 4: xs(k) and us(k) -- one row per controller with SS targets --
+ss_idx = find([CONTROLLERS.has_ss_targets]);
+
+if ~isempty(ss_idx)
+    n_ss = length(ss_idx);
+    figure('Name','Exp SS Targets xs(k) and us(k)','NumberTitle','off', ...
+           'Position',[200 50 1000 300*n_ss])
+
+    for row = 1:n_ss
+        c = ss_idx(row);
+        if isempty(CONTROLLERS(c).Xs_k), continue; end
+
+        Ns_c   = min(Ns, CONTROLLERS(c).N);
+        Xs_c   = CONTROLLERS(c).Xs_k(:, 1:Ns_c);
+        Us_c   = CONTROLLERS(c).Us_k(:, 1:Ns_c);
+        kT_c   = CONTROLLERS(c).kT(1:Ns_c);
+        n_st_c = size(Xs_c, 1);
+
+        subplot(n_ss, 2, 2*row-1), hold on
+        for s = 1:n_st_c
+            plot(kT_c, Xs_c(s,:), 'LineWidth', 1.5)
+        end
+        xline(step_locs(1),'k:')
+        xline(step_locs(2),'k:')
+        grid on
+        ylabel('x_{s,i}(k)  (deg C)', 'FontSize', 10)
+        title(sprintf('%s - SS Target States x_s(k)', CONTROLLERS(c).label), 'FontSize', 11)
+        lx = arrayfun(@(s) sprintf('x_{s,%d}(k)', s), 1:n_st_c, 'UniformOutput', false);
+        legend(lx{:}, 'Location','Best','FontSize',9)
+        if row == n_ss, xlabel('Sample  k', 'FontSize', 10); end
+
+        subplot(n_ss, 2, 2*row), hold on
+        stairs(kT_c, Us_c(1,:)', 'LineWidth', 1.5)
+        stairs(kT_c, Us_c(2,:)', 'LineWidth', 1.5)
+        xline(step_locs(1),'k:')
+        xline(step_locs(2),'k:')
+        grid on
+        ylabel('u_{s,i}(k)  (% heater)', 'FontSize', 10)
+        title(sprintf('%s - SS Target Inputs u_s(k)', CONTROLLERS(c).label), 'FontSize', 11)
+        legend('u_{s,1}(k)','u_{s,2}(k)', 'Location','Best','FontSize',9)
+        if row == n_ss, xlabel('Sample  k', 'FontSize', 10); end
+    end
+end
+
+%% -- Figure 5: Performance index bar chart --------------------------------
+figure('Name','Exp Performance Index Comparison','NumberTitle','off', ...
+       'Position',[250 50 1000 500])
+
+data_loop1 = zeros(3, nC);
+data_loop2 = zeros(3, nC);
+for c = 1:nC
+    data_loop1(:,c) = [CONTROLLERS(c).SSE(1);
+                       CONTROLLERS(c).SSMV(1);
+                       CONTROLLERS(c).SSdelMV(1)];
+    data_loop2(:,c) = [CONTROLLERS(c).SSE(2);
+                       CONTROLLERS(c).SSMV(2);
+                       CONTROLLERS(c).SSdelMV(2)];
+end
 
 labels = {'SSE','SSMV','SS\DeltaMV'};
 group  = categorical(labels);
 group  = reordercats(group, labels);
+colors = reshape([CONTROLLERS.color], 3, nC)';
 
-subplot(1,2,1)
-b1 = bar(group, metrics_loop1, 'grouped');
-b1(1).FaceColor = [0.2 0.4 0.8];
-b1(2).FaceColor = [0.8 0.2 0.2];
-grid on
-ylabel('Index Value','FontSize',10)
-title('Loop 1  (T_1 / H_1)','FontSize',11)
-legend('PI','MPC','Location','Best','FontSize',9)
+for sp = 1:2
+    subplot(1,2,sp)
+    data   = data_loop1;
+    ltitle = 'Loop 1  (T_1 / H_1)';
+    if sp == 2
+        data   = data_loop2;
+        ltitle = 'Loop 2  (T_2 / H_2)';
+    end
+    b = bar(group, data', 'grouped');
+    for c = 1:nC, b(c).FaceColor = colors(c,:); end
+    grid on
+    ylabel('Index Value', 'FontSize', 10)
+    title(ltitle, 'FontSize', 11)
+    legend({CONTROLLERS.label}, 'Location','Best','FontSize',9)
+end
+sgtitle('Performance Indices - Experiment Comparison', 'FontSize', 13)
 
-subplot(1,2,2)
-b2 = bar(group, metrics_loop2, 'grouped');
-b2(1).FaceColor = [0.2 0.4 0.8];
-b2(2).FaceColor = [0.8 0.2 0.2];
-grid on
-ylabel('Index Value','FontSize',10)
-title('Loop 2  (T_2 / H_2)','FontSize',11)
-legend('PI','MPC','Location','Best','FontSize',9)
-sgtitle('Performance Indices – Experiment Comparison','FontSize',13)
 
-%% ── Save ─────────────────────────────────────────────────────────────────
-exp_compare.kT_cmp       = kT_cmp;
-exp_compare.Ns            = Ns;
-exp_compare.Yk_pi         = Yk_pi(:,1:Ns);
-exp_compare.Uk_pi         = Uk_pi(:,1:Ns);
-exp_compare.Rk_f_pi       = Rk_f_pi(:,1:Ns);
-exp_compare.ek_f_pi       = ek_f_pi(:,1:Ns);
-exp_compare.Yk_mpc        = Yk_mpc(:,1:Ns);
-exp_compare.Uk_mpc        = Uk_mpc(:,1:Ns);
-exp_compare.Rk_f_mpc      = Rk_f_mpc(:,1:Ns);
-exp_compare.ek_f_mpc      = ek_f_mpc(:,1:Ns);
-exp_compare.Xs_mpc        = Xs_mpc(:,1:Ns);
-exp_compare.Us_mpc        = Us_mpc(:,1:Ns);
-exp_compare.SSE_pi        = [SSE_pi_1;  SSE_pi_2 ];
-exp_compare.SSE_mpc       = [SSE_mpc_1; SSE_mpc_2];
-exp_compare.SSMV_pi       = [SSMV_pi_1;  SSMV_pi_2 ];
-exp_compare.SSMV_mpc      = [SSMV_mpc_1; SSMV_mpc_2];
-exp_compare.SSdelMV_pi    = [SSdelMV_pi_1;  SSdelMV_pi_2 ];
-exp_compare.SSdelMV_mpc   = [SSdelMV_mpc_1; SSdelMV_mpc_2];
+%%  SECTION 5 -- SAVE
+
+exp_compare.Ns = Ns;
+exp_compare.kT = kT;
+exp_compare.Ts = Ts;
+
+for c = 1:nC
+    fn = matlab.lang.makeValidName(CONTROLLERS(c).label);
+    exp_compare.(fn).label   = CONTROLLERS(c).label;
+    exp_compare.(fn).Yk      = CONTROLLERS(c).Yk(:, 1:Ns);
+    exp_compare.(fn).Uk      = CONTROLLERS(c).Uk(:, 1:Ns);
+    exp_compare.(fn).Rk_f    = CONTROLLERS(c).Rk_f(:, 1:Ns);
+    exp_compare.(fn).ek_f    = CONTROLLERS(c).ek_f(:, 1:Ns);
+    exp_compare.(fn).SSE     = CONTROLLERS(c).SSE;
+    exp_compare.(fn).SSMV    = CONTROLLERS(c).SSMV;
+    exp_compare.(fn).SSdelMV = CONTROLLERS(c).SSdelMV;
+    if CONTROLLERS(c).has_ss_targets && ~isempty(CONTROLLERS(c).Xs_k)
+        Ns_c = min(Ns, CONTROLLERS(c).N);
+        exp_compare.(fn).Xs_k = CONTROLLERS(c).Xs_k(:, 1:Ns_c);
+        exp_compare.(fn).Us_k = CONTROLLERS(c).Us_k(:, 1:Ns_c);
+    end
+end
 
 save TCL_Compare_ExpResults  exp_compare
 fprintf('Results saved to  TCL_Compare_ExpResults.mat\n');

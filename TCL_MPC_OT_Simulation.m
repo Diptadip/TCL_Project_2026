@@ -103,8 +103,8 @@ k_settle = 100;
 k_step1  = 101;
 k_step2  = 301;
 
-delta_r_step1 = [ +6; -4];
-delta_r_step2 = [ -5; +7];
+delta_r_step1 = [ +4; -2];
+delta_r_step2 = [ -2; +4];
 
 kT    = (0 : N-1)';
 t_sec = kT * Ts;
